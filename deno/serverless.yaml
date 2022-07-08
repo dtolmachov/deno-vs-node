@@ -1,0 +1,85 @@
+service: deno-animal-service
+frameworkVersion: '3'
+configValidationMode: error
+
+
+provider:
+  name: aws
+  stage: dev
+  region: us-east-1
+  # Function common
+  runtime: provided.al2
+  memorySize: 128
+  layers:
+    - !GetAtt denoApp.Outputs.LayerArn
+  iam:
+    role:
+      name: deno-animal-lambda-role
+      statements:
+        - Effect: "Allow"
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+          Resource:
+            - Fn::GetAtt: [denoAnimalTable, Arn]
+
+
+package:
+  patterns:
+    - '!.deno_dir/gen/file/**'
+
+
+plugins:
+  - serverless-scriptable-plugin
+
+
+custom:
+  scriptHooks:
+    before:package:createDeploymentArtifacts: DENO_DIR=.deno_dir deno cache api.ts && cp -R .deno_dir/gen/file/$PWD/ .deno_dir/LAMBDA_TASK_ROOT
+
+
+functions:
+  create:
+    handler: api.create
+    events:
+      - httpApi:
+          method: post
+          path: /deno/animal
+  get:
+    handler: api.get
+    events:
+      - httpApi:
+          method: get
+          path: /deno/animal/{id}
+  list:
+    handler: api.list
+    events:
+      - httpApi:
+          method: get
+          path: /deno/animal
+
+
+resources:
+  Transform: AWS::Serverless-2016-10-31
+  Resources:
+    denoApp:
+      Type: AWS::Serverless::Application
+      Properties:
+        Location:
+          ApplicationId: arn:aws:serverlessrepo:us-east-1:390065572566:applications/deno
+          SemanticVersion: 1.23.3
+    denoAnimalTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: deno_animals
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
