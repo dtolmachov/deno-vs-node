@@ -1,0 +1,79 @@
+service: node-ts-animal-service
+frameworkVersion: '3'
+configValidationMode: error
+
+
+provider:
+  name: aws
+  stage: dev
+  region: us-east-1
+  # Function common
+  runtime: nodejs16.x
+  memorySize: 128
+  iam:
+    role:
+      name: node-ts-animal-lambda-role
+      statements:
+        - Effect: "Allow"
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+          Resource:
+            - Fn::GetAtt: [nodeTsAnimalTable, Arn]
+
+
+package:
+  patterns:
+    - '!./**'
+    - './node_modules/**'
+    - './dist/**'
+
+
+plugins:
+  - serverless-scriptable-plugin
+
+
+custom:
+  scriptHooks:
+    before:package:createDeploymentArtifacts: npm run build && npm install --omit=dev
+
+
+functions:
+  create:
+    handler: dist/api.create
+    events:
+      - httpApi:
+          method: post
+          path: /node-ts/animal
+  get:
+    handler: dist/api.get
+    events:
+      - httpApi:
+          method: get
+          path: /node-ts/animal/{id}
+  list:
+    handler: dist/api.list
+    events:
+      - httpApi:
+          method: get
+          path: /node-ts/animal
+
+
+resources:
+  Transform: AWS::Serverless-2016-10-31
+  Resources:
+    nodeTsAnimalTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: node_ts_animals
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
